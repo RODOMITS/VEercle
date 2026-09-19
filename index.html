@@ -291,7 +291,12 @@
             } else {
                 if (tg) {
                     try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
-                    tg.openTelegramLink('tg://user?id=1821268346'); 
+                    
+                    // Открываем личку по ID и закрываем приложение
+                    window.location.href = 'tg://user?id=1821268346';
+                    setTimeout(() => {
+                        tg.close();
+                    }, 100);
                 }
             }
         }
