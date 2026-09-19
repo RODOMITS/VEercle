@@ -129,17 +129,17 @@ body {
 }
 
 .center-img {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 90px;
-    height: 90px;
-    border-radius: 50%;
-    box-shadow: 0 0 20px rgba(0,0,0,0.5);
-    z-index: 10;
-    background-color: #fff;
-    object-fit: cover;
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 90px !important;
+    height: 90px !important;
+    background-color: transparent !important; /* УБРАЛИ БЕЛЫЙ ЦВЕТ */
+    box-shadow: none !important; /* Убрали круглую тень */
+    border-radius: 0 !important;
+    z-index: 10 !important;
+    object-fit: contain !important; /* Чтобы картинка не обрезалась по краям */
 }
 
 .avatar {
