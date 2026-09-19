@@ -169,8 +169,9 @@
 
     <div class="main-container">
         <div class="timer-box">
+            <!-- ТЕПЕРЬ ТУТ 15 ПОЛЬЗОВАТЕЛЕЙ -->
             <div id="exceptionText" style="color: #ff3b30; font-size: 13px; font-weight: bold; margin-bottom: 8px; display: none;">
-                Исключение: Розыгрыш закончится только когда наберётся 18 пользователей!
+                Исключение: Розыгрыш закончится только когда наберётся 15 пользователей!
             </div>
             <span style="color: var(--hint); font-size: 14px;">До конца розыгрыша:</span>
             <div class="timer" id="timerDisplay">00:00:00</div>
@@ -205,7 +206,6 @@
             ? '@' + tg.initDataUnsafe.user.username 
             : String(tg?.initDataUnsafe?.user?.id || '');
 
-        // Запоминаем участие в памяти телефона
         let hasJoinedGarama = localStorage.getItem('has_joined_garama') === 'true';
 
         let currentTab = garamaWinner ? 'garama' : (dragonWinner ? 'dragon' : 'garama');
@@ -251,8 +251,9 @@
                     tg.MainButton.enable();
                 }
                 
+                // ТЕПЕРЬ ДОБИВАЕМ ДО 15 СЛОТОВ
                 let dpPadded = [...dragonParticipants];
-                while (dpPadded.length < 18) {
+                while (dpPadded.length < 15) {
                     dpPadded.push("");
                 }
                 renderWheel(dpPadded);
@@ -366,7 +367,7 @@
                 if (tg) {
                     try { tg.HapticFeedback.notificationOccurred('success'); } catch(e) {}
                     tg.showAlert("Розыгрыш завершен. Результаты отправлены в бота. Закройте приложение.", () => {
-                        localStorage.removeItem('has_joined_garama'); // Сбрасываем участие для нового круга
+                        localStorage.removeItem('has_joined_garama');
                         tg.close();
                     });
                 }
