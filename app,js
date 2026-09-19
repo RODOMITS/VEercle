@@ -2,11 +2,15 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 tg.ready();
 
-// ==== ВАЖНО: СЮДА ВСТАВИШЬ ССЫЛКУ NGROK ====
-const API_URL = 'https://ТВОЯ-ССЫЛКА-NGROK.ngrok-free.app/api/state';
+// Получаем реальные данные из ссылки
+const urlParams = new URLSearchParams(window.location.search);
+const garamaParticipants = urlParams.get('gp') ? urlParams.get('gp').split(',').filter(x => x) : [];
+const dragonParticipants = urlParams.get('dp') ? urlParams.get('dp').split(',').filter(x => x) : [];
 
-let currentTab = 'garama';
-let realParticipants = [];
+const garamaWinner = urlParams.get('gw');
+const dragonWinner = urlParams.get('dw');
+
+let currentTab = garamaWinner ? 'garama' : (dragonWinner ? 'dragon' : 'garama');
 let isSpinning = false;
 
 tg.MainButton.show();
@@ -29,49 +33,34 @@ function switchTab(tab) {
         exceptionText.style.display = 'none'; 
         tg.MainButton.setText("ПЕРЕЙТИ В БОТА");
         tg.MainButton.color = tg.themeParams.button_color || "#3390ec";
+        renderWheel(garamaParticipants);
+
+        if (garamaWinner && !isSpinning) {
+            setTimeout(() => spinToWinner(garamaWinner, garamaParticipants), 500);
+        }
     } else {
         centerImg.src = 'Dragon.png';
         infoText.innerHTML = "<b>Цена: 1 Гарама.</b><br>Розыгрыш по субботам в 20:00 МСК.";
         exceptionText.style.display = 'block'; 
         tg.MainButton.setText("ПЕРЕДАТЬ ГАРАМУ");
         tg.MainButton.color = tg.themeParams.button_color || "#3390ec";
+        
+        let dpPadded = [...dragonParticipants];
+        while (dpPadded.length < 18) {
+            dpPadded.push("");
+        }
+        renderWheel(dpPadded);
+
+        if (dragonWinner && !isSpinning) {
+            setTimeout(() => spinToWinner(dragonWinner, dpPadded), 500);
+        }
     }
-    fetchState(); // Сразу запрашиваем данные при переключении
 }
 
 function handleAction() {
     tg.HapticFeedback.impactOccurred('medium');
     tg.openTelegramLink('tg://user?id=1821268346'); 
 }
-
-// Запрос данных с твоего бота
-async function fetchState() {
-    if (isSpinning) return;
-    try {
-        const res = await fetch(API_URL);
-        const data = await res.json();
-        const state = data[currentTab];
-
-        realParticipants = state.participants;
-        
-        // Для дракона добиваем пустые места до 18, если участников меньше
-        if (currentTab === 'dragon') {
-            while(realParticipants.length < 18) {
-                realParticipants.push("");
-            }
-        }
-
-        renderWheel(realParticipants);
-
-        // Если бот объявил победителя, крутим колесо!
-        if (state.winner && !isSpinning) {
-            spinToWinner(state.winner, realParticipants);
-        }
-    } catch (e) {
-        console.log("Ожидание связи с ботом...");
-    }
-}
-setInterval(fetchState, 2000); // Обновление каждые 2 секунды
 
 function renderWheel(participants) {
     if (isSpinning) return;
@@ -113,11 +102,8 @@ function spinToWinner(winnerInitials, participants) {
     const index = participants.indexOf(winnerInitials);
     const total = participants.length;
     
-    // Вычисляем точный угол, чтобы колесо остановилось ровно на победителе!
     const anglePerSlot = 360 / total;
     const winnerAngle = index * anglePerSlot;
-    
-    // 270 градусов - это положение верхней стрелки в CSS
     const extraRotation = 270 - winnerAngle; 
     const totalRotation = (360 * 5) + extraRotation; 
 
@@ -127,13 +113,12 @@ function spinToWinner(winnerInitials, participants) {
 
     setTimeout(() => {
         tg.HapticFeedback.notificationOccurred('success');
-        tg.showAlert("Розыгрыш завершен! Результаты отправлены в бота. Закройте приложение.", () => {
+        tg.showAlert("Розыгрыш завершен. Результаты отправлены в бота. Закройте приложение.", () => {
             tg.close();
         });
     }, 6000);
 }
 
-// Таймер
 function getNextDrawDate() {
     const now = new Date();
     const mskTime = new Date(now.getTime() + (3 * 60 * 60 * 1000) + now.getTimezoneOffset() * 60000);
@@ -163,7 +148,7 @@ function updateTimer() {
     const diff = target - mskTime;
 
     if (diff <= 0) {
-        document.getElementById('timerDisplay').innerText = "ОЖИДАНИЕ БОТА...";
+        document.getElementById('timerDisplay').innerText = "РОЗЫГРЫШ ЗАВЕРШЕН";
         return;
     }
 
@@ -177,4 +162,4 @@ function updateTimer() {
 }
 
 setInterval(updateTimer, 1000);
-switchTab('garama');
+switchTab(currentTab);
