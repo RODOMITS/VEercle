@@ -2,13 +2,15 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 tg.ready();
 
-// Получаем реальные данные из ссылки
 const urlParams = new URLSearchParams(window.location.search);
 const garamaParticipants = urlParams.get('gp') ? urlParams.get('gp').split(',').filter(x => x) : [];
 const dragonParticipants = urlParams.get('dp') ? urlParams.get('dp').split(',').filter(x => x) : [];
 
 const garamaWinner = urlParams.get('gw');
 const dragonWinner = urlParams.get('dw');
+
+// Получаем прямую ссылку на аватарку текущего пользователя из Telegram
+const myPhotoUrl = tg.initDataUnsafe?.user?.photo_url;
 
 let currentTab = garamaWinner ? 'garama' : (dragonWinner ? 'dragon' : 'garama');
 let isSpinning = false;
@@ -62,6 +64,17 @@ function handleAction() {
     tg.openTelegramLink('tg://user?id=1821268346'); 
 }
 
+// Превращает идентификатор пользователя в реальную ссылку на аватар
+function getAvatarSrc(identifier) {
+    if (identifier.startsWith('@')) {
+        // Официальный аватар Telegram по юзернейму
+        return `https://t.me/i/userpic/320/${identifier.slice(1)}.jpg`;
+    } else {
+        // Красивый графический аватар, если у человека нет @юзернейма
+        return `https://api.dicebear.com/7.x/shapes/svg?seed=${identifier}`;
+    }
+}
+
 function renderWheel(participants) {
     if (isSpinning) return;
     const wheel = document.getElementById('wheel');
@@ -72,34 +85,47 @@ function renderWheel(participants) {
     const total = participants.length === 0 ? 1 : participants.length; 
     const radius = 110; 
 
-    participants.forEach((initials, index) => {
+    participants.forEach((identifier, index) => {
         const angle = (index / total) * (2 * Math.PI);
         const x = radius * Math.cos(angle) + 140; 
         const y = radius * Math.sin(angle) + 140;
 
-        const slot = document.createElement('div');
-        slot.className = 'avatar';
-        slot.style.left = `${x}px`;
-        slot.style.top = `${y}px`;
+        if (identifier !== "") {
+            const img = document.createElement('img');
+            img.className = 'avatar';
+            img.style.left = `${x}px`;
+            img.style.top = `${y}px`;
 
-        if (initials !== "") {
-            slot.innerText = initials;
-            slot.style.backgroundColor = `hsl(${index * (360 / total)}, 60%, 50%)`;
+            // Если это слот текущего пользователя и у него есть аватарка в Telegram
+            if (index === participants.length - 1 && myPhotoUrl) {
+                img.src = myPhotoUrl;
+            } else {
+                img.src = getAvatarSrc(identifier);
+            }
+
+            // Если аватарка закрыта настройками приватности — подставляем резервную
+            img.onerror = () => {
+                img.src = `https://api.dicebear.com/7.x/shapes/svg?seed=${identifier}`;
+            };
+
+            wheel.appendChild(img);
         } else {
-            slot.innerText = '';
-            slot.style.backgroundColor = 'rgba(150, 150, 150, 0.1)';
-            slot.style.border = '2px dashed rgba(150, 150, 150, 0.4)';
+            // Пустой слот
+            const emptySlot = document.createElement('div');
+            emptySlot.className = 'avatar empty';
+            emptySlot.style.left = `${x}px`;
+            emptySlot.style.top = `${y}px`;
+            wheel.appendChild(emptySlot);
         }
-        wheel.appendChild(slot);
     });
 }
 
-function spinToWinner(winnerInitials, participants) {
+function spinToWinner(winnerIdentifier, participants) {
     isSpinning = true;
     document.getElementById('timerDisplay').innerText = "ВЫБОР ПОБЕДИТЕЛЯ...";
     tg.HapticFeedback.notificationOccurred('warning');
 
-    const index = participants.indexOf(winnerInitials);
+    const index = participants.indexOf(winnerIdentifier);
     const total = participants.length;
     
     const anglePerSlot = 360 / total;
@@ -126,40 +152,4 @@ function getNextDrawDate() {
     target.setHours(20, 0, 0, 0); 
     if (currentTab === 'dragon') {
         let day = target.getDay();
-        let daysToSaturday = (6 - day + 7) % 7;
-        if (daysToSaturday === 0 && mskTime >= target) daysToSaturday = 7;
-        target.setDate(target.getDate() + daysToSaturday);
-    } else {
-        const epoch = new Date('2024-01-01T20:00:00'); 
-        const diffDays = Math.floor((mskTime - epoch) / (1000 * 60 * 60 * 24));
-        let daysToNext = 3 - (diffDays % 3);
-        if (daysToNext === 3 && mskTime < target) daysToNext = 0;
-        else if (daysToNext === 3) daysToNext = 3;
-        target.setDate(target.getDate() + daysToNext);
-    }
-    return target;
-}
-
-function updateTimer() {
-    if (isSpinning) return;
-    const now = new Date();
-    const mskTime = new Date(now.getTime() + (3 * 60 * 60 * 1000) + now.getTimezoneOffset() * 60000);
-    const target = getNextDrawDate();
-    const diff = target - mskTime;
-
-    if (diff <= 0) {
-        document.getElementById('timerDisplay').innerText = "РОЗЫГРЫШ ЗАВЕРШЕН";
-        return;
-    }
-
-    const d = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const s = Math.floor((diff % (1000 * 60)) / 1000);
-    let timeString = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    if (d > 0) timeString = `${d} дн. ` + timeString;
-    document.getElementById('timerDisplay').innerText = timeString;
-}
-
-setInterval(updateTimer, 1000);
-switchTab(currentTab);
+        let daysToSaturday = (6 - day + 7)
