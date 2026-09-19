@@ -1,0 +1,180 @@
+const tg = window.Telegram.WebApp;
+tg.expand();
+tg.ready();
+
+// ==== ВАЖНО: СЮДА ВСТАВИШЬ ССЫЛКУ NGROK ====
+const API_URL = 'https://ТВОЯ-ССЫЛКА-NGROK.ngrok-free.app/api/state';
+
+let currentTab = 'garama';
+let realParticipants = [];
+let isSpinning = false;
+
+tg.MainButton.show();
+tg.MainButton.onClick(handleAction);
+
+function switchTab(tab) {
+    if (isSpinning) return;
+    currentTab = tab;
+    document.getElementById('tab-garama').classList.remove('active');
+    document.getElementById('tab-dragon').classList.remove('active');
+    document.getElementById(`tab-${tab}`).classList.add('active');
+
+    const centerImg = document.getElementById('centerImg');
+    const infoText = document.getElementById('infoText');
+    const exceptionText = document.getElementById('exceptionText'); 
+
+    if (tab === 'garama') {
+        centerImg.src = 'Garama.png';
+        infoText.innerHTML = "Бесплатный розыгрыш каждые 3 дня. <br>Победитель заберет Гараму!";
+        exceptionText.style.display = 'none'; 
+        tg.MainButton.setText("ПЕРЕЙТИ В БОТА");
+        tg.MainButton.color = tg.themeParams.button_color || "#3390ec";
+    } else {
+        centerImg.src = 'Dragon.png';
+        infoText.innerHTML = "<b>Цена: 1 Гарама.</b><br>Розыгрыш по субботам в 20:00 МСК.";
+        exceptionText.style.display = 'block'; 
+        tg.MainButton.setText("ПЕРЕДАТЬ ГАРАМУ");
+        tg.MainButton.color = tg.themeParams.button_color || "#3390ec";
+    }
+    fetchState(); // Сразу запрашиваем данные при переключении
+}
+
+function handleAction() {
+    tg.HapticFeedback.impactOccurred('medium');
+    tg.openTelegramLink('tg://user?id=1821268346'); 
+}
+
+// Запрос данных с твоего бота
+async function fetchState() {
+    if (isSpinning) return;
+    try {
+        const res = await fetch(API_URL);
+        const data = await res.json();
+        const state = data[currentTab];
+
+        realParticipants = state.participants;
+        
+        // Для дракона добиваем пустые места до 18, если участников меньше
+        if (currentTab === 'dragon') {
+            while(realParticipants.length < 18) {
+                realParticipants.push("");
+            }
+        }
+
+        renderWheel(realParticipants);
+
+        // Если бот объявил победителя, крутим колесо!
+        if (state.winner && !isSpinning) {
+            spinToWinner(state.winner, realParticipants);
+        }
+    } catch (e) {
+        console.log("Ожидание связи с ботом...");
+    }
+}
+setInterval(fetchState, 2000); // Обновление каждые 2 секунды
+
+function renderWheel(participants) {
+    if (isSpinning) return;
+    const wheel = document.getElementById('wheel');
+    wheel.innerHTML = '';
+    wheel.className = 'wheel idle';
+    wheel.style.transform = `rotate(0deg)`;
+
+    const total = participants.length === 0 ? 1 : participants.length; 
+    const radius = 110; 
+
+    participants.forEach((initials, index) => {
+        const angle = (index / total) * (2 * Math.PI);
+        const x = radius * Math.cos(angle) + 140; 
+        const y = radius * Math.sin(angle) + 140;
+
+        const slot = document.createElement('div');
+        slot.className = 'avatar';
+        slot.style.left = `${x}px`;
+        slot.style.top = `${y}px`;
+
+        if (initials !== "") {
+            slot.innerText = initials;
+            slot.style.backgroundColor = `hsl(${index * (360 / total)}, 60%, 50%)`;
+        } else {
+            slot.innerText = '';
+            slot.style.backgroundColor = 'rgba(150, 150, 150, 0.1)';
+            slot.style.border = '2px dashed rgba(150, 150, 150, 0.4)';
+        }
+        wheel.appendChild(slot);
+    });
+}
+
+function spinToWinner(winnerInitials, participants) {
+    isSpinning = true;
+    document.getElementById('timerDisplay').innerText = "ВЫБОР ПОБЕДИТЕЛЯ...";
+    tg.HapticFeedback.notificationOccurred('warning');
+
+    const index = participants.indexOf(winnerInitials);
+    const total = participants.length;
+    
+    // Вычисляем точный угол, чтобы колесо остановилось ровно на победителе!
+    const anglePerSlot = 360 / total;
+    const winnerAngle = index * anglePerSlot;
+    
+    // 270 градусов - это положение верхней стрелки в CSS
+    const extraRotation = 270 - winnerAngle; 
+    const totalRotation = (360 * 5) + extraRotation; 
+
+    const wheel = document.getElementById('wheel');
+    wheel.classList.remove('idle');
+    wheel.style.transform = `rotate(${totalRotation}deg)`; 
+
+    setTimeout(() => {
+        tg.HapticFeedback.notificationOccurred('success');
+        tg.showAlert("Розыгрыш завершен! Результаты отправлены в бота. Закройте приложение.", () => {
+            tg.close();
+        });
+    }, 6000);
+}
+
+// Таймер
+function getNextDrawDate() {
+    const now = new Date();
+    const mskTime = new Date(now.getTime() + (3 * 60 * 60 * 1000) + now.getTimezoneOffset() * 60000);
+    let target = new Date(mskTime);
+    target.setHours(20, 0, 0, 0); 
+    if (currentTab === 'dragon') {
+        let day = target.getDay();
+        let daysToSaturday = (6 - day + 7) % 7;
+        if (daysToSaturday === 0 && mskTime >= target) daysToSaturday = 7;
+        target.setDate(target.getDate() + daysToSaturday);
+    } else {
+        const epoch = new Date('2024-01-01T20:00:00'); 
+        const diffDays = Math.floor((mskTime - epoch) / (1000 * 60 * 60 * 24));
+        let daysToNext = 3 - (diffDays % 3);
+        if (daysToNext === 3 && mskTime < target) daysToNext = 0;
+        else if (daysToNext === 3) daysToNext = 3;
+        target.setDate(target.getDate() + daysToNext);
+    }
+    return target;
+}
+
+function updateTimer() {
+    if (isSpinning) return;
+    const now = new Date();
+    const mskTime = new Date(now.getTime() + (3 * 60 * 60 * 1000) + now.getTimezoneOffset() * 60000);
+    const target = getNextDrawDate();
+    const diff = target - mskTime;
+
+    if (diff <= 0) {
+        document.getElementById('timerDisplay').innerText = "ОЖИДАНИЕ БОТА...";
+        return;
+    }
+
+    const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const s = Math.floor((diff % (1000 * 60)) / 1000);
+    let timeString = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    if (d > 0) timeString = `${d} дн. ` + timeString;
+    document.getElementById('timerDisplay').innerText = timeString;
+}
+
+setInterval(updateTimer, 1000);
+switchTab('garama');

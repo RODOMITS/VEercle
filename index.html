@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>RODOMITS</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="header-tabs">
+        <div class="tab active" id="tab-garama" onclick="switchTab('garama')">Гарама</div>
+        <div class="tab" id="tab-dragon" onclick="switchTab('dragon')">Дракон</div>
+    </div>
+
+    <div class="main-container">
+        <div class="timer-box">
+            <div id="exceptionText" style="color: #ff3b30; font-size: 13px; font-weight: bold; margin-bottom: 8px; display: none;">
+                Исключение: Розыгрыш закончится только когда наберётся 18 пользователей!
+            </div>
+            <span style="color: var(--hint); font-size: 14px;">До конца розыгрыша:</span>
+            <div class="timer" id="timerDisplay">00:00:00</div>
+        </div>
+        
+        <div class="roulette-wrapper">
+            <div class="pointer"></div>
+            <div class="wheel-container">
+                <div class="wheel" id="wheel"></div>
+                <img src="Garama.png" alt="Center" class="center-img" id="centerImg">
+            </div>
+        </div>
+        
+        <div class="info-card" id="infoText"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
