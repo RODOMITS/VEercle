@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>RODOMITS</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: var(--tg-theme-bg-color, #1c1c1d);
+            --text: var(--tg-theme-text-color, #ffffff);
+            --accent: var(--tg-theme-button-color, #3390ec);
+            --accent-text: var(--tg-theme-button-text-color, #ffffff);
+            --secondary: var(--tg-theme-secondary-bg-color, #2c2c2e);
+            --hint: var(--tg-theme-hint-color, #8e8e93);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .header-tabs {
+            display: flex;
+            background-color: var(--secondary);
+            padding: 10px;
+            border-radius: 0 0 20px 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            font-weight: 600;
+            color: var(--hint);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .tab.active {
+            background-color: var(--accent);
+            color: var(--accent-text);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+        }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .timer-box {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .timer {
+            font-size: 32px;
+            font-weight: 800;
+            color: var(--text);
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.2);
+        }
+
+        .roulette-wrapper {
+            position: relative;
+            margin-bottom: 30px;
+        }
+
+        .pointer {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 25px solid var(--accent);
+            z-index: 20;
+            filter: drop-shadow(0 3px 5px rgba(0,0,0,0.5));
+        }
+
+        .wheel-container {
+            position: relative;
+            width: 280px;
+            height: 280px;
+        }
+
+        .wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 3px solid var(--secondary);
+            background: radial-gradient(circle, var(--secondary) 30%, var(--bg) 100%);
+            position: relative;
+            transition: transform 5s cubic-bezier(0.1, 0.7, 0.1, 1); 
+            box-shadow: 0 0 30px rgba(0,0,0,0.3);
+        }
+
+        .wheel.idle {
+            animation: slowSpin 30s linear infinite;
+        }
+
+        @keyframes slowSpin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .center-img {
+            position: absolute !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            width: 90px !important;
+            height: 90px !important;
+            border-radius: 50% !important;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5) !important;
+            z-index: 10 !important;
+            background-color: #fff !important;
+            object-fit: cover !important;
+        }
+
+        .avatar {
+            position: absolute;
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--accent);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            transform: translate(-50%, -50%);
+            background-color: var(--secondary);
+        }
+
+        .avatar.empty {
+            background-color: rgba(150, 150, 150, 0.1);
+            border: 2px dashed rgba(150, 150, 150, 0.4);
+        }
+
+        .info-card {
+            background-color: var(--secondary);
+            padding: 15px 20px;
+            border-radius: 15px;
+            text-align: center;
+            font-size: 14px;
+            line-height: 1.5;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header-tabs">
+        <div class="tab active" id="tab-garama" onclick="switchTab('garama')">Гарама</div>
+        <div class="tab" id="tab-dragon" onclick="switchTab('dragon')">Дракон</div>
+    </div>
+
+    <div class="main-container">
+        <div class="timer-box">
+            <div id="exceptionText" style="color: #ff3b30; font-size: 13px; font-weight: bold; margin-bottom: 8px; display: none;">
+                Исключение: Розыгрыш закончится только когда наберётся 18 пользователей!
+            </div>
+            <span style="color: var(--hint); font-size: 14px;">До конца розыгрыша:</span>
+            <div class="timer" id="timerDisplay">00:00:00</div>
+        </div>
+        
+        <div class="roulette-wrapper">
+            <div class="pointer"></div>
+            <div class="wheel-container">
+                <div class="wheel" id="wheel"></div>
+                <img src="Garama.png" alt="Center" class="center-img" id="centerImg">
+            </div>
+        </div>
+        
+        <div class="info-card" id="infoText"></div>
+    </div>
+
+    <script>
+        const tg = window.Telegram?.WebApp;
+        if (tg) {
+            try { tg.expand(); tg.ready(); } catch(e) {}
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        let garamaParticipants = urlParams.get('gp') ? urlParams.get('gp').split(',').filter(x => x) : [];
+        const dragonParticipants = urlParams.get('dp') ? urlParams.get('dp').split(',').filter(x => x) : [];
+
+        const garamaWinner = urlParams.get('gw');
+        const dragonWinner = urlParams.get('dw');
+
+        const myPhotoUrl = tg?.initDataUnsafe?.user?.photo_url;
+        const myIdentifier = tg?.initDataUnsafe?.user?.username 
+            ? '@' + tg.initDataUnsafe.user.username 
+            : String(tg?.initDataUnsafe?.user?.id || '');
+
+        // Отделяем текущего пользователя от списка, чтобы он не участвовал сразу
+        let hasJoinedGarama = false;
+        garamaParticipants = garamaParticipants.filter(id => id !== myIdentifier);
+
+        let currentTab = garamaWinner ? 'garama' : (dragonWinner ? 'dragon' : 'garama');
+        let isSpinning = false;
+
+        if (tg?.MainButton) {
+            try {
+                tg.MainButton.show();
+                tg.MainButton.onClick(handleMainButtonClick);
+            } catch(e) {}
+        }
+
+        function switchTab(tab) {
+            if (isSpinning) return;
+            currentTab = tab;
+            document.getElementById('tab-garama').classList.remove('active');
+            document.getElementById('tab-dragon').classList.remove('active');
+            document.getElementById(`tab-${tab}`).classList.add('active');
+
+            const centerImg = document.getElementById('centerImg');
+            const infoText = document.getElementById('infoText');
+            const exceptionText = document.getElementById('exceptionText'); 
+
+            if (tab === 'garama') {
+                centerImg.src = 'Garama.png';
+                infoText.innerHTML = "Бесплатный розыгрыш каждые 3 дня. <br>Победитель заберет Гараму!";
+                exceptionText.style.display = 'none'; 
+                
+                // Настройка кнопки
+                updateGaramaButton();
+
+                // Формируем список участников (добавляем себя только если нажали кнопку)
+                let currentGaramaList = [...garamaParticipants];
+                if (hasJoinedGarama) {
+                    currentGaramaList.push(myIdentifier);
+                }
+                renderWheel(currentGaramaList);
+
+                if (garamaWinner && !isSpinning) {
+                    setTimeout(() => spinToWinner(garamaWinner, currentGaramaList), 500);
+                }
+            } else {
+                centerImg.src = 'Dragon.png';
+                infoText.innerHTML = "<b>Цена: 1 Гарама.</b><br>Розыгрыш по субботам в 20:00 МСК.";
+                exceptionText.style.display = 'block'; 
+                
+                if (tg?.MainButton) {
+                    tg.MainButton.setText("ПЕРЕДАТЬ ГАРАМУ");
+                    tg.MainButton.color = tg.themeParams?.button_color || "#3390ec";
+                    tg.MainButton.enable();
+                }
+                
+                let dpPadded = [...dragonParticipants];
+                while (dpPadded.length < 18) {
+                    dpPadded.push("");
+                }
+                renderWheel(dpPadded);
+
+                if (dragonWinner && !isSpinning) {
+                    setTimeout(() => spinToWinner(dragonWinner, dpPadded), 500);
+                }
+            }
+        }
+
+        function updateGaramaButton() {
+            if (!tg?.MainButton) return;
+            if (hasJoinedGarama) {
+                tg.MainButton.setText("ВЫ В ИГРЕ");
+                tg.MainButton.color = tg.themeParams?.hint_color || "#999999";
+                tg.MainButton.disable();
+            } else {
+                tg.MainButton.setText("ВОЙТИ В РОЗЫГРЫШ");
+                tg.MainButton.color = tg.themeParams?.button_color || "#3390ec";
+                tg.MainButton.enable();
+            }
+        }
+
+        function handleMainButtonClick() {
+            if (currentTab === 'garama') {
+                if (!hasJoinedGarama) {
+                    hasJoinedGarama = true;
+                    if (tg) {
+                        try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
+                        tg.showAlert("Вы успешно вошли в розыгрыш Гарамы!");
+                    }
+                    switchTab('garama'); // Обновляет колесо и добавляет твою аватарку
+                }
+            } else {
+                if (tg) {
+                    try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
+                    tg.openTelegramLink('tg://user?id=1821268346'); 
+                }
+            }
+        }
+
+        function getAvatarSrc(identifier) {
+            if (identifier.startsWith('@')) {
+                return `https://t.me/i/userpic/320/${identifier.slice(1)}.jpg`;
+            } else {
+                return `https://api.dicebear.com/7.x/shapes/svg?seed=${identifier}`;
+            }
+        }
+
+        function renderWheel(participants) {
+            if (isSpinning) return;
+            const wheel = document.getElementById('wheel');
+            wheel.innerHTML = '';
+            wheel.className = 'wheel idle';
+            wheel.style.transform = `rotate(0deg)`;
+
+            const total = participants.length === 0 ? 1 : participants.length; 
+            const radius = 110; 
+
+            participants.forEach((identifier, index) => {
+                const angle = (index / total) * (2 * Math.PI);
+                const x = radius * Math.cos(angle) + 140; 
+                const y = radius * Math.sin(angle) + 140;
+
+                if (identifier !== "") {
+                    const img = document.createElement('img');
+                    img.className = 'avatar';
+                    img.style.left = `${x}px`;
+                    img.style.top = `${y}px`;
+
+                    // Если это аватарка текущего пользователя
+                    if (identifier === myIdentifier && myPhotoUrl) {
+                        img.src = myPhotoUrl;
+                    } else {
+                        img.src = getAvatarSrc(identifier);
+                    }
+
+                    img.onerror = () => {
+                        img.src = `https://api.dicebear.com/7.x/shapes/svg?seed=${identifier}`;
+                    };
+
+                    wheel.appendChild(img);
+                } else {
+                    const emptySlot = document.createElement('div');
+                    emptySlot.className = 'avatar empty';
+                    emptySlot.style.left = `${x}px`;
+                    emptySlot.style.top = `${y}px`;
+                    wheel.appendChild(emptySlot);
+                }
+            });
+        }
+
+        function spinToWinner(winnerIdentifier, participants) {
+            isSpinning = true;
+            document.getElementById('timerDisplay').innerText = "ВЫБОР ПОБЕДИТЕЛЯ...";
+            if (tg) try { tg.HapticFeedback.notificationOccurred('warning'); } catch(e) {}
+
+            const index = participants.indexOf(winnerIdentifier);
+            const total = participants.length;
+            
+            const anglePerSlot = 360 / total;
+            const winnerAngle = index * anglePerSlot;
+            const extraRotation = 270 - winnerAngle; 
+            const totalRotation = (360 * 5) + extraRotation; 
+
+            const wheel = document.getElementById('wheel');
+            wheel.classList.remove('idle');
+            wheel.style.transform = `rotate(${totalRotation}deg)`; 
+
+            setTimeout(() => {
+                if (tg) {
+                    try { tg.HapticFeedback.notificationOccurred('success'); } catch(e) {}
+                    tg.showAlert("Розыгрыш завершен. Результаты отправлены в бота. Закройте приложение.", () => {
+                        tg.close();
+                    });
+                }
+            }, 6000);
+        }
+
+        function getNextDrawDate() {
+            const now = new Date();
+            const mskTime = new Date(now.getTime() + (3 * 60 * 60 * 1000) + now.getTimezoneOffset() * 60000);
+            let target = new Date(mskTime);
+            target.setHours(20, 0, 0, 0); 
+            if (currentTab === 'dragon') {
+                let day = target.getDay();
+                let daysToSaturday = (6 - day + 7) % 7;
+                if (daysToSaturday === 0 && mskTime >= target) daysToSaturday = 7;
+                target.setDate(target.getDate() + daysToSaturday);
+            } else {
+                const epoch = new Date('2024-01-01T20:00:00'); 
+                const diffDays = Math.floor((mskTime - epoch) / (1000 * 60 * 60 * 24));
+                let daysToNext = 3 - (diffDays % 3);
+                if (daysToNext === 3 && mskTime < target) daysToNext = 0;
+                else if (daysToNext === 3) daysToNext = 3;
+                target.setDate(target.getDate() + daysToNext);
+            }
+            return target;
+        }
+
+        function updateTimer() {
+            if (isSpinning) return;
+            const now = new Date();
+            const mskTime = new Date(now.getTime() + (3 * 60 * 60 * 1000) + now.getTimezoneOffset() * 60000);
+            const target = getNextDrawDate();
+            const diff = target - mskTime;
+
+            if (diff <= 0) {
+                document.getElementById('timerDisplay').innerText = "РОЗЫГРЫШ ЗАВЕРШЕН";
+                return;
+            }
+
+            const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((diff % (1000 * 60)) / 1000);
+            let timeString = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            if (d > 0) timeString = `${d} дн. ` + timeString;
+            document.getElementById('timerDisplay').innerText = timeString;
+        }
+
+        setInterval(updateTimer, 1000);
+        switchTab(currentTab);
+    </script>
+</body>
+</html>
