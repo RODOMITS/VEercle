@@ -292,11 +292,7 @@
                 if (tg) {
                     try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
                     
-                    // Открываем личку по ID и закрываем приложение
-                    window.location.href = 'tg://user?id=1821268346';
-                    setTimeout(() => {
-                        tg.close();
-                    }, 100);
+                    tg.openTelegramLink('https://t.me/rodomits');
                 }
             }
         }
