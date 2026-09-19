@@ -27,6 +27,23 @@ body {
     box-shadow: 0 4px 15px rgba(0,0,0,0.1);
 }
 
+.avatar {
+    position: absolute;
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--accent);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    transform: translate(-50%, -50%);
+    background-color: var(--secondary);
+}
+
+.avatar.empty {
+    background-color: rgba(150, 150, 150, 0.1);
+    border: 2px dashed rgba(150, 150, 150, 0.4);
+}
+
 .tab {
     flex: 1;
     text-align: center;
