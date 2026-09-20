@@ -21,7 +21,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
             padding: 0;
-            overflow: hidden;
+            overflow-x: hidden;
             display: flex;
             flex-direction: column;
             height: 100vh;
@@ -58,16 +58,16 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 15px;
         }
 
         .timer-box {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
 
         .timer {
-            font-size: 32px;
+            font-size: 30px;
             font-weight: 800;
             color: var(--text);
             letter-spacing: 2px;
@@ -76,7 +76,7 @@
 
         .roulette-wrapper {
             position: relative;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
 
         .pointer {
@@ -152,12 +152,112 @@
 
         .info-card {
             background-color: var(--secondary);
-            padding: 15px 20px;
+            padding: 12px 18px;
             border-radius: 15px;
             text-align: center;
-            font-size: 14px;
-            line-height: 1.5;
+            font-size: 13px;
+            line-height: 1.4;
+            max-width: 320px;
+            margin-bottom: 12px;
+        }
+
+        /* КНОПКИ БОНУСОВ */
+        .bonus-buttons {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+            max-width: 340px;
+            justify-content: center;
+        }
+
+        .bonus-btn {
+            background-color: var(--secondary);
+            border: 1px solid var(--accent);
+            color: var(--text);
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            flex: 1;
+        }
+
+        .bonus-btn:active {
+            transform: scale(0.96);
+            background-color: var(--accent);
+            color: var(--accent-text);
+        }
+
+        /* МОДАЛЬНОЕ ОКНО */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.75);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal-box {
+            background: var(--secondary);
+            border: 1px solid var(--accent);
+            border-radius: 20px;
+            padding: 20px;
             max-width: 300px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .modal-title {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--text);
+        }
+
+        .modal-text {
+            font-size: 14px;
+            color: var(--hint);
+            line-height: 1.6;
+            text-align: left;
+            margin-bottom: 15px;
+        }
+
+        .copy-target {
+            background: var(--bg);
+            border: 1px dashed var(--accent);
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 13px;
+            color: var(--accent);
+            font-weight: bold;
+            cursor: pointer;
+            user-select: all;
+            word-break: break-all;
+            margin-bottom: 8px;
+        }
+
+        .copy-toast {
+            font-size: 11px;
+            color: #34c759;
+            height: 14px;
+            margin-bottom: 12px;
+        }
+
+        .modal-close {
+            background: var(--accent);
+            color: var(--accent-text);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 700;
+            width: 100%;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -169,7 +269,6 @@
 
     <div class="main-container">
         <div class="timer-box">
-            <!-- ТЕПЕРЬ ТУТ 15 ПОЛЬЗОВАТЕЛЕЙ -->
             <div id="exceptionText" style="color: #ff3b30; font-size: 13px; font-weight: bold; margin-bottom: 8px; display: none;">
                 Исключение: Розыгрыш закончится только когда наберётся 15 пользователей!
             </div>
@@ -186,6 +285,27 @@
         </div>
         
         <div class="info-card" id="infoText"></div>
+
+        <!-- КНОПКИ БОНУСОВ -->
+        <div class="bonus-buttons">
+            <button class="bonus-btn" id="shareBtn" style="display: none;" onclick="handleShare()">Поделиться: +10% к победе!</button>
+            <button class="bonus-btn" onclick="openBioModal()">+10% к победе</button>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО ИНСТРУКЦИИ О СЕБЕ -->
+    <div class="modal-overlay" id="bioModal">
+        <div class="modal-box">
+            <div class="modal-title">Бонус к победе</div>
+            <div class="modal-text">
+                • Зайди в настройки<br>
+                • Напиши в «О себе»
+            </div>
+            <!-- Текст копируется по клику без слова "копируется" -->
+            <div class="copy-target" onclick="copyBioText()">Бесплатные брейнроты » @RODOMITSGift_bot</div>
+            <div class="copy-toast" id="copyToast"></div>
+            <button class="modal-close" onclick="closeBioModal()">Закрыть</button>
+        </div>
     </div>
 
     <script>
@@ -193,6 +313,9 @@
         if (tg) {
             try { tg.expand(); tg.ready(); } catch(e) {}
         }
+
+        // ВПИШИ СВОЙ ЮЗЕРНЕЙМ ТЕЛЕГРАМ БЕЗ @ (ЕСЛИ ЕСТЬ). НАПРИМЕР: 'rodomits'
+        const ADMIN_USERNAME = ''; 
 
         const urlParams = new URLSearchParams(window.location.search);
         let garamaParticipants = urlParams.get('gp') ? urlParams.get('gp').split(',').filter(x => x) : [];
@@ -207,6 +330,15 @@
             : String(tg?.initDataUnsafe?.user?.id || '');
 
         let hasJoinedGarama = localStorage.getItem('has_joined_garama') === 'true';
+
+        if (tg?.CloudStorage) {
+            tg.CloudStorage.getItem('has_joined_garama', (err, val) => {
+                if (!err && val === 'true') {
+                    hasJoinedGarama = true;
+                    updateGaramaButton();
+                }
+            });
+        }
 
         let currentTab = garamaWinner ? 'garama' : (dragonWinner ? 'dragon' : 'garama');
         let isSpinning = false;
@@ -244,6 +376,7 @@
                 centerImg.src = 'Dragon.png';
                 infoText.innerHTML = "<b>Цена: 1 Гарама.</b><br>Розыгрыш по субботам в 20:00 МСК.";
                 exceptionText.style.display = 'block'; 
+                document.getElementById('shareBtn').style.display = 'none';
                 
                 if (tg?.MainButton) {
                     tg.MainButton.setText("ВОЙТИ ЗА ГАРАМУ");
@@ -251,7 +384,6 @@
                     tg.MainButton.enable();
                 }
                 
-                // ТЕПЕРЬ ДОБИВАЕМ ДО 15 СЛОТОВ
                 let dpPadded = [...dragonParticipants];
                 while (dpPadded.length < 15) {
                     dpPadded.push("");
@@ -266,14 +398,17 @@
 
         function updateGaramaButton() {
             if (!tg?.MainButton) return;
+            const shareBtn = document.getElementById('shareBtn');
             if (hasJoinedGarama) {
                 tg.MainButton.setText("ВЫ В ИГРЕ");
                 tg.MainButton.color = tg.themeParams?.hint_color || "#999999";
                 tg.MainButton.disable();
+                shareBtn.style.display = 'block'; // Показываем кнопку поделиться после входа
             } else {
                 tg.MainButton.setText("ВОЙТИ В РОЗЫГРЫШ");
                 tg.MainButton.color = tg.themeParams?.button_color || "#3390ec";
                 tg.MainButton.enable();
+                shareBtn.style.display = 'none';
             }
         }
 
@@ -282,6 +417,9 @@
                 if (!hasJoinedGarama) {
                     hasJoinedGarama = true;
                     localStorage.setItem('has_joined_garama', 'true');
+                    if (tg?.CloudStorage) {
+                        try { tg.CloudStorage.setItem('has_joined_garama', 'true'); } catch(e) {}
+                    }
                     if (tg) {
                         try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
                         tg.showAlert("Вы успешно вошли в розыгрыш Гарамы!");
@@ -292,9 +430,47 @@
                 if (tg) {
                     try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
                     
-                    tg.openTelegramLink('https://t.me/rodomits');
+                    // ЕСЛИ УКАЗАН ЮЗЕРНЕЙМ — ОТКРЫВАЕТ ЛИЧКУ НАПРЯМУЮ
+                    if (ADMIN_USERNAME && ADMIN_USERNAME !== '') {
+                        tg.openTelegramLink('https://t.me/' + ADMIN_USERNAME);
+                    } else {
+                        // ИНАЧЕ ОТКРЫВАЕТ ЧАТ С БОТОМ, КОТОРЫЙ ВЫДАЕТ ССЫЛКУ НА ID
+                        tg.openTelegramLink('https://t.me/RODOMITSGift_bot?start=dragon');
+                    }
                 }
             }
+        }
+
+        // === ПОДЕЛИТЬСЯ РОЗЫГРЫШЕМ ===
+        function handleShare() {
+            if (tg) {
+                try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
+                // Открывает выбор получателя с готовым сообщением
+                const shareUrl = "https://t.me/share/url?url=https://t.me/RODOMITSGift_bot&text=" + encodeURIComponent("Я участвую в бесплатном розыгрыше на гараму, а ты?");
+                tg.openTelegramLink(shareUrl);
+            }
+        }
+
+        // === МОДАЛКА БОНУСА О СЕБЕ ===
+        function openBioModal() {
+            if (tg) try { tg.HapticFeedback.impactOccurred('light'); } catch(e) {}
+            document.getElementById('bioModal').style.display = 'flex';
+            document.getElementById('copyToast').innerText = '';
+        }
+
+        function closeBioModal() {
+            document.getElementById('bioModal').style.display = 'none';
+        }
+
+        function copyBioText() {
+            const text = "Бесплатные брейнроты » @RODOMITSGift_bot";
+            navigator.clipboard.writeText(text).then(() => {
+                if (tg) try { tg.HapticFeedback.notificationOccurred('success'); } catch(e) {}
+                document.getElementById('copyToast').innerText = "Скопировано!";
+                setTimeout(() => {
+                    document.getElementById('copyToast').innerText = "";
+                }, 2000);
+            });
         }
 
         function getAvatarSrc(identifier) {
@@ -369,6 +545,7 @@
                     try { tg.HapticFeedback.notificationOccurred('success'); } catch(e) {}
                     tg.showAlert("Розыгрыш завершен. Результаты отправлены в бота. Закройте приложение.", () => {
                         localStorage.removeItem('has_joined_garama');
+                        if (tg?.CloudStorage) tg.CloudStorage.removeItem('has_joined_garama');
                         tg.close();
                     });
                 }
