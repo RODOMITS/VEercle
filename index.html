@@ -24,7 +24,7 @@
             overflow-x: hidden;
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: var(--tg-viewport-stable-height, 100vh);
         }
 
         .header-tabs {
@@ -107,8 +107,8 @@
             border: 3px solid rgba(255, 255, 255, 0.08);
             background: radial-gradient(circle, var(--secondary) 30%, var(--bg) 100%);
             position: relative;
-            transition: transform 5s cubic-bezier(0.1, 0.7, 0.1, 1); 
             box-shadow: 0 0 35px rgba(0,0,0,0.35);
+            box-sizing: border-box;
         }
 
         .wheel.idle {
@@ -163,7 +163,6 @@
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
-        /* === ПРЕМИАЛЬНЫЕ КНОПКИ БОНУСОВ === */
         .bonus-buttons {
             display: flex;
             gap: 10px;
@@ -207,7 +206,6 @@
             letter-spacing: 0.5px;
         }
 
-        /* === МОДАЛЬНОЕ ОКНО БИО === */
         .modal-overlay {
             position: fixed;
             inset: 0;
@@ -286,6 +284,7 @@
             justify-content: center;
             font-size: 11px;
             font-weight: 800;
+            flex-shrink: 0;
         }
 
         .copy-card {
@@ -347,20 +346,19 @@
                 Исключение: Розыгрыш закончится только когда наберётся 15 пользователей!
             </div>
             <span style="color: var(--hint); font-size: 14px;">До конца розыгрыша:</span>
-            <div class="timer" id="timerDisplay">00:00:00</div>
+            <div class="timer" id="timerDisplay">--:--:--</div>
         </div>
-        
+
         <div class="roulette-wrapper">
             <div class="pointer"></div>
             <div class="wheel-container">
-                <div class="wheel" id="wheel"></div>
+                <div class="wheel idle" id="wheel"></div>
                 <img src="Garama.png" alt="Center" class="center-img" id="centerImg">
             </div>
         </div>
-        
+
         <div class="info-card" id="infoText"></div>
 
-        <!-- КНОПКИ БОНУСОВ -->
         <div class="bonus-buttons">
             <div class="bonus-card" id="shareBtn" style="display: none;" onclick="handleShare()">
                 <span>Поделиться</span>
@@ -373,12 +371,11 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО ИНСТРУКЦИИ О СЕБЕ -->
     <div class="modal-overlay" id="bioModal">
         <div class="modal-box">
             <div class="modal-badge">+10% К ПОБЕДЕ</div>
             <div class="modal-title">Бонус за статус</div>
-            
+
             <div class="steps-container">
                 <div class="step-item">
                     <div class="step-num">1</div>
@@ -390,7 +387,6 @@
                 </div>
             </div>
 
-            <!-- Блок копирования без лишних слов -->
             <div class="copy-card" id="copyBox" onclick="copyBioText()">
                 Бесплатные брейнроты » @RODOMITSGift_bot
             </div>
@@ -403,88 +399,94 @@
     <script>
         const tg = window.Telegram?.WebApp;
         if (tg) {
-            try { tg.expand(); tg.ready(); } catch(e) {}
+            try { tg.expand(); tg.ready(); } catch (e) {}
         }
 
-        // ТВОЙ ЮЗЕРНЕЙМ ВШИТ НАПРЯМУЮ
-        const ADMIN_USERNAME = 'rodomits'; 
+        const ADMIN_USERNAME = 'rodomits';
+        const BIO_TEXT = "Бесплатные брейнроты » @RODOMITSGift_bot";
+        const WHEEL_SIZE = 280;
+        const WHEEL_RADIUS = 110;
+        const SPIN_DURATION_MS = 5000;
 
         const urlParams = new URLSearchParams(window.location.search);
-        let garamaParticipants = urlParams.get('gp') ? urlParams.get('gp').split(',').filter(x => x) : [];
-        const dragonParticipants = urlParams.get('dp') ? urlParams.get('dp').split(',').filter(x => x) : [];
+        const parseList = (key) => (urlParams.get(key) || '').split(',').map(x => x.trim()).filter(Boolean);
 
+        const garamaParticipants = parseList('gp');
+        const dragonParticipants = parseList('dp');
         const garamaWinner = urlParams.get('gw');
         const dragonWinner = urlParams.get('dw');
 
-        const myPhotoUrl = tg?.initDataUnsafe?.user?.photo_url;
-        const myIdentifier = tg?.initDataUnsafe?.user?.username 
-            ? '@' + tg.initDataUnsafe.user.username 
-            : String(tg?.initDataUnsafe?.user?.id || '');
+        const myUser = tg?.initDataUnsafe?.user;
+        const myPhotoUrl = myUser?.photo_url;
+        const myIdentifier = myUser?.username ? '@' + myUser.username : String(myUser?.id || '');
 
         let hasJoinedGarama = localStorage.getItem('has_joined_garama') === 'true';
-
-        if (tg?.CloudStorage) {
-            tg.CloudStorage.getItem('has_joined_garama', (err, val) => {
-                if (!err && val === 'true') {
-                    hasJoinedGarama = true;
-                    updateGaramaButton();
-                }
-            });
-        }
-
         let currentTab = garamaWinner ? 'garama' : (dragonWinner ? 'dragon' : 'garama');
         let isSpinning = false;
 
+        if (tg?.CloudStorage) {
+            try {
+                tg.CloudStorage.getItem('has_joined_garama', (err, val) => {
+                    if (!err && val === 'true') {
+                        hasJoinedGarama = true;
+                        if (currentTab === 'garama') updateGaramaButton();
+                    }
+                });
+            } catch (e) {}
+        }
+
         if (tg?.MainButton) {
             try {
-                tg.MainButton.show();
                 tg.MainButton.onClick(handleMainButtonClick);
-            } catch(e) {}
+                tg.MainButton.show();
+            } catch (e) {}
+        }
+
+        function padDragon(list) {
+            const padded = [...list];
+            while (padded.length < 15) padded.push("");
+            return padded;
+        }
+
+        function getParticipants(tab) {
+            return tab === 'garama' ? garamaParticipants : padDragon(dragonParticipants);
         }
 
         function switchTab(tab) {
             if (isSpinning) return;
             currentTab = tab;
-            document.getElementById('tab-garama').classList.remove('active');
-            document.getElementById('tab-dragon').classList.remove('active');
-            document.getElementById(`tab-${tab}`).classList.add('active');
+            document.getElementById('tab-garama').classList.toggle('active', tab === 'garama');
+            document.getElementById('tab-dragon').classList.toggle('active', tab === 'dragon');
 
             const centerImg = document.getElementById('centerImg');
             const infoText = document.getElementById('infoText');
-            const exceptionText = document.getElementById('exceptionText'); 
+            const exceptionText = document.getElementById('exceptionText');
+            const participants = getParticipants(tab);
 
             if (tab === 'garama') {
                 centerImg.src = 'Garama.png';
                 infoText.innerHTML = "Бесплатный розыгрыш каждые 3 дня. <br>Победитель заберет Гараму!";
-                exceptionText.style.display = 'none'; 
-                
+                exceptionText.style.display = 'none';
                 updateGaramaButton();
-                renderWheel(garamaParticipants);
-
-                if (garamaWinner && !isSpinning) {
-                    setTimeout(() => spinToWinner(garamaWinner, garamaParticipants), 500);
-                }
             } else {
                 centerImg.src = 'Dragon.png';
                 infoText.innerHTML = "<b>Цена: 1 Гарама.</b><br>Розыгрыш по субботам в 20:00 МСК.";
-                exceptionText.style.display = 'block'; 
+                exceptionText.style.display = 'block';
                 document.getElementById('shareBtn').style.display = 'none';
-                
+
                 if (tg?.MainButton) {
                     tg.MainButton.setText("ВОЙТИ ЗА ГАРАМУ");
                     tg.MainButton.color = tg.themeParams?.button_color || "#3390ec";
                     tg.MainButton.enable();
                 }
-                
-                let dpPadded = [...dragonParticipants];
-                while (dpPadded.length < 15) {
-                    dpPadded.push("");
-                }
-                renderWheel(dpPadded);
+            }
 
-                if (dragonWinner && !isSpinning) {
-                    setTimeout(() => spinToWinner(dragonWinner, dpPadded), 500);
-                }
+            renderWheel(participants);
+            updateTimer();
+
+            const winner = tab === 'garama' ? garamaWinner : dragonWinner;
+            if (winner) {
+                setTimeout(() => spinToWinner(winner, participants), 600);
             }
         }
 
@@ -510,35 +512,32 @@
                     hasJoinedGarama = true;
                     localStorage.setItem('has_joined_garama', 'true');
                     if (tg?.CloudStorage) {
-                        try { tg.CloudStorage.setItem('has_joined_garama', 'true'); } catch(e) {}
+                        try { tg.CloudStorage.setItem('has_joined_garama', 'true'); } catch (e) {}
                     }
                     if (tg) {
-                        try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
+                        try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {}
                         tg.showAlert("Вы успешно вошли в розыгрыш Гарамы!");
                     }
                     updateGaramaButton();
                 }
             } else {
                 if (tg) {
-                    try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
+                    try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {}
                     tg.openTelegramLink('https://t.me/' + ADMIN_USERNAME);
                 }
             }
         }
 
-        // === ПОДЕЛИТЬСЯ С ОБНОВЛЕННЫМ ТЕКСТОМ ===
         function handleShare() {
-            if (tg) {
-                try { tg.HapticFeedback.impactOccurred('medium'); } catch(e) {}
-                const shareText = "Я участвую в бесплатном розыгрыше на гараму тут👇👇👇\n\n— @RODOMITSGift_bot —";
-                const shareUrl = "https://t.me/share/url?text=" + encodeURIComponent(shareText);
-                tg.openTelegramLink(shareUrl);
-            }
+            if (!tg) return;
+            try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {}
+            const shareText = "Я участвую в бесплатном розыгрыше на гараму тут👇👇👇\n\n— @RODOMITSGift_bot —";
+            const shareUrl = "https://t.me/share/url?url=" + encodeURIComponent("https://t.me/RODOMITSGift_bot") + "&text=" + encodeURIComponent(shareText);
+            tg.openTelegramLink(shareUrl);
         }
 
-        // === МОДАЛКА БОНУСА О СЕБЕ ===
         function openBioModal() {
-            if (tg) try { tg.HapticFeedback.impactOccurred('light'); } catch(e) {}
+            if (tg) try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {}
             document.getElementById('bioModal').style.display = 'flex';
             document.getElementById('copyStatus').innerText = '';
             document.getElementById('copyBox').classList.remove('copied');
@@ -548,57 +547,74 @@
             document.getElementById('bioModal').style.display = 'none';
         }
 
-        function copyBioText() {
-            const text = "Бесплатные брейнроты » @RODOMITSGift_bot";
+        function showCopied() {
             const box = document.getElementById('copyBox');
-            navigator.clipboard.writeText(text).then(() => {
-                if (tg) try { tg.HapticFeedback.notificationOccurred('success'); } catch(e) {}
-                box.classList.add('copied');
-                document.getElementById('copyStatus').innerText = "Скопировано в буфер!";
-                setTimeout(() => {
-                    document.getElementById('copyStatus').innerText = "";
-                    box.classList.remove('copied');
-                }, 2000);
-            });
+            if (tg) try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+            box.classList.add('copied');
+            document.getElementById('copyStatus').innerText = "Скопировано в буфер!";
+            setTimeout(() => {
+                document.getElementById('copyStatus').innerText = "";
+                box.classList.remove('copied');
+            }, 2000);
+        }
+
+        function copyBioText() {
+            const fallbackCopy = () => {
+                const area = document.createElement('textarea');
+                area.value = BIO_TEXT;
+                area.style.position = 'fixed';
+                area.style.opacity = '0';
+                document.body.appendChild(area);
+                area.select();
+                try { document.execCommand('copy'); showCopied(); } catch (e) {}
+                document.body.removeChild(area);
+            };
+
+            if (navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(BIO_TEXT).then(showCopied).catch(fallbackCopy);
+            } else {
+                fallbackCopy();
+            }
+        }
+
+        function fallbackAvatar(identifier) {
+            return `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(identifier)}`;
         }
 
         function getAvatarSrc(identifier) {
             if (identifier.startsWith('@')) {
                 return `https://t.me/i/userpic/320/${identifier.slice(1)}.jpg`;
-            } else {
-                return `https://api.dicebear.com/7.x/shapes/svg?seed=${identifier}`;
             }
+            return fallbackAvatar(identifier);
         }
 
         function renderWheel(participants) {
-            if (isSpinning) return;
             const wheel = document.getElementById('wheel');
             wheel.innerHTML = '';
+            wheel.style.transition = 'none';
+            wheel.style.transform = '';
             wheel.className = 'wheel idle';
-            wheel.style.transform = `rotate(0deg)`;
 
-            const total = participants.length === 0 ? 1 : participants.length; 
-            const radius = 110; 
+            const total = Math.max(participants.length, 1);
+            const center = WHEEL_SIZE / 2;
 
             participants.forEach((identifier, index) => {
                 const angle = (index / total) * (2 * Math.PI);
-                const x = radius * Math.cos(angle) + 140; 
-                const y = radius * Math.sin(angle) + 140;
+                const x = WHEEL_RADIUS * Math.cos(angle) + center;
+                const y = WHEEL_RADIUS * Math.sin(angle) + center;
 
                 if (identifier !== "") {
                     const img = document.createElement('img');
                     img.className = 'avatar';
                     img.style.left = `${x}px`;
                     img.style.top = `${y}px`;
+                    img.dataset.identifier = identifier;
 
-                    if (identifier === myIdentifier && myPhotoUrl) {
-                        img.src = myPhotoUrl;
-                    } else {
-                        img.src = getAvatarSrc(identifier);
-                    }
+                    img.src = (identifier === myIdentifier && myPhotoUrl) ? myPhotoUrl : getAvatarSrc(identifier);
 
                     img.onerror = () => {
-                        img.src = `https://api.dicebear.com/7.x/shapes/svg?seed=${identifier}`;
+                        img.onerror = null;
+                        img.src = fallbackAvatar(identifier);
                     };
 
                     wheel.appendChild(img);
@@ -612,51 +628,65 @@
             });
         }
 
+        function finishSpin(winnerIdentifier) {
+            if (!tg) {
+                isSpinning = false;
+                return;
+            }
+            try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
+            tg.showAlert("Победитель: " + winnerIdentifier + "\nРезультаты отправлены в бота.", () => {
+                localStorage.removeItem('has_joined_garama');
+                if (tg.CloudStorage) {
+                    try { tg.CloudStorage.removeItem('has_joined_garama'); } catch (e) {}
+                }
+                tg.close();
+            });
+        }
+
         function spinToWinner(winnerIdentifier, participants) {
+            const index = participants.indexOf(winnerIdentifier);
+            if (index === -1) {
+                if (tg) tg.showAlert("Победитель: " + winnerIdentifier);
+                return;
+            }
+
             isSpinning = true;
             document.getElementById('timerDisplay').innerText = "ВЫБОР ПОБЕДИТЕЛЯ...";
-            if (tg) try { tg.HapticFeedback.notificationOccurred('warning'); } catch(e) {}
-
-            const index = participants.indexOf(winnerIdentifier);
-            const total = participants.length;
-            
-            const anglePerSlot = 360 / total;
-            const winnerAngle = index * anglePerSlot;
-            const extraRotation = 270 - winnerAngle; 
-            const totalRotation = (360 * 5) + extraRotation; 
+            if (tg) try { tg.HapticFeedback.notificationOccurred('warning'); } catch (e) {}
 
             const wheel = document.getElementById('wheel');
-            wheel.classList.remove('idle');
-            wheel.style.transform = `rotate(${totalRotation}deg)`; 
+            const anglePerSlot = 360 / participants.length;
+            const finalAngle = 360 * 6 + (270 - index * anglePerSlot);
 
-            setTimeout(() => {
-                if (tg) {
-                    try { tg.HapticFeedback.notificationOccurred('success'); } catch(e) {}
-                    tg.showAlert("Розыгрыш завершен. Результаты отправлены в бота. Закройте приложение.", () => {
-                        localStorage.removeItem('has_joined_garama');
-                        if (tg?.CloudStorage) tg.CloudStorage.removeItem('has_joined_garama');
-                        tg.close();
-                    });
-                }
-            }, 6000);
+            wheel.classList.remove('idle');
+            wheel.style.transition = 'none';
+            wheel.style.transform = 'rotate(0deg)';
+            void wheel.offsetWidth;
+            wheel.style.transition = `transform ${SPIN_DURATION_MS}ms cubic-bezier(0.1, 0.7, 0.1, 1)`;
+            wheel.style.transform = `rotate(${finalAngle}deg)`;
+
+            setTimeout(() => finishSpin(winnerIdentifier), SPIN_DURATION_MS + 600);
+        }
+
+        function getMskNow() {
+            const now = new Date();
+            return new Date(now.getTime() + now.getTimezoneOffset() * 60000 + 3 * 3600000);
         }
 
         function getNextDrawDate() {
-            const now = new Date();
-            const mskTime = new Date(now.getTime() + (3 * 60 * 60 * 1000) + now.getTimezoneOffset() * 60000);
-            let target = new Date(mskTime);
-            target.setHours(20, 0, 0, 0); 
+            const mskNow = getMskNow();
+            const target = new Date(mskNow);
+            target.setHours(20, 0, 0, 0);
+
             if (currentTab === 'dragon') {
-                let day = target.getDay();
-                let daysToSaturday = (6 - day + 7) % 7;
-                if (daysToSaturday === 0 && mskTime >= target) daysToSaturday = 7;
+                let daysToSaturday = (6 - target.getDay() + 7) % 7;
+                if (daysToSaturday === 0 && mskNow >= target) daysToSaturday = 7;
                 target.setDate(target.getDate() + daysToSaturday);
             } else {
-                const epoch = new Date('2024-01-01T20:00:00'); 
-                const diffDays = Math.floor((mskTime - epoch) / (1000 * 60 * 60 * 24));
-                let daysToNext = 3 - (diffDays % 3);
-                if (daysToNext === 3 && mskTime < target) daysToNext = 0;
-                else if (daysToNext === 3) daysToNext = 3;
+                const epoch = new Date(2024, 0, 1, 20, 0, 0, 0);
+                const daysSince = Math.round((target - epoch) / 86400000);
+                let daysToNext = (3 - (daysSince % 3)) % 3;
+                if (daysToNext === 0 && mskNow >= target) daysToNext = 3;
                 target.setDate(target.getDate() + daysToNext);
             }
             return target;
@@ -664,20 +694,16 @@
 
         function updateTimer() {
             if (isSpinning) return;
-            const now = new Date();
-            const mskTime = new Date(now.getTime() + (3 * 60 * 60 * 1000) + now.getTimezoneOffset() * 60000);
-            const target = getNextDrawDate();
-            const diff = target - mskTime;
-
+            const diff = getNextDrawDate() - getMskNow();
             if (diff <= 0) {
                 document.getElementById('timerDisplay').innerText = "РОЗЫГРЫШ ЗАВЕРШЕН";
                 return;
             }
 
-            const d = Math.floor(diff / (1000 * 60 * 60 * 24));
-            const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-            const s = Math.floor((diff % (1000 * 60)) / 1000);
+            const d = Math.floor(diff / 86400000);
+            const h = Math.floor((diff % 86400000) / 3600000);
+            const m = Math.floor((diff % 3600000) / 60000);
+            const s = Math.floor((diff % 60000) / 1000);
             let timeString = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
             if (d > 0) timeString = `${d} дн. ` + timeString;
             document.getElementById('timerDisplay').innerText = timeString;
