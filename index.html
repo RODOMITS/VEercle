@@ -396,135 +396,157 @@
         </div>
     </div>
 
-    <script>
-        const tg = window.Telegram?.WebApp;
-        if (tg) {
-            try { tg.expand(); tg.ready(); } catch (e) {}
-        }
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getFirestore, collection, query, where, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+        const FIREBASE_CONFIG = {
+            apiKey: "AIzaSyDmBuLmUFQkuH70XnuS97X_Kr0ZiiSd1o4",
+            authDomain: "rododarit.firebaseapp.com",
+            projectId: "rododarit",
+            storageBucket: "rododarit.firebasestorage.app",
+            messagingSenderId: "469218088162",
+            appId: "1:469218088162:web:53d80485912148f3d23abb"
+        };
+
+        const BOT_USERNAME = 'RODOMITSGift_bot';
         const ADMIN_USERNAME = 'rodomits';
         const BIO_TEXT = "Бесплатные брейнроты » @RODOMITSGift_bot";
         const WHEEL_SIZE = 280;
         const WHEEL_RADIUS = 110;
         const SPIN_DURATION_MS = 5000;
+        const DRAGON_MIN_SLOTS = 15;
+        const RESULT_MAX_AGE_SECONDS = 3600;
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const parseList = (key) => (urlParams.get(key) || '').split(',').map(x => x.trim()).filter(Boolean);
+        const tg = window.Telegram?.WebApp;
+        if (tg) {
+            try { tg.expand(); tg.ready(); } catch (e) {}
+        }
 
-        const garamaParticipants = parseList('gp');
-        const dragonParticipants = parseList('dp');
-        const garamaWinner = urlParams.get('gw');
-        const dragonWinner = urlParams.get('dw');
+        const firebaseApp = initializeApp(FIREBASE_CONFIG);
+        const firestore = getFirestore(firebaseApp);
 
         const myUser = tg?.initDataUnsafe?.user;
         const myPhotoUrl = myUser?.photo_url;
         const myIdentifier = myUser?.username ? '@' + myUser.username : String(myUser?.id || '');
 
-        let hasJoinedGarama = localStorage.getItem('has_joined_garama') === 'true';
-        let currentTab = garamaWinner ? 'garama' : (dragonWinner ? 'dragon' : 'garama');
-        let isSpinning = false;
+        const state = {
+            tab: 'garama',
+            garama: [],
+            dragon: [],
+            spinning: false,
+            seenDraws: JSON.parse(localStorage.getItem('seen_draws') || '{}')
+        };
 
-        if (tg?.CloudStorage) {
-            try {
-                tg.CloudStorage.getItem('has_joined_garama', (err, val) => {
-                    if (!err && val === 'true') {
-                        hasJoinedGarama = true;
-                        if (currentTab === 'garama') updateGaramaButton();
-                    }
-                });
-            } catch (e) {}
-        }
+        const pendingResults = {};
 
-        if (tg?.MainButton) {
-            try {
-                tg.MainButton.onClick(handleMainButtonClick);
-                tg.MainButton.show();
-            } catch (e) {}
+        function markDrawSeen(key, drawId) {
+            state.seenDraws[key] = drawId;
+            localStorage.setItem('seen_draws', JSON.stringify(state.seenDraws));
         }
 
         function padDragon(list) {
             const padded = [...list];
-            while (padded.length < 15) padded.push("");
+            while (padded.length < DRAGON_MIN_SLOTS) padded.push("");
             return padded;
         }
 
-        function getParticipants(tab) {
-            return tab === 'garama' ? garamaParticipants : padDragon(dragonParticipants);
+        function currentParticipants() {
+            return state.tab === 'garama' ? state.garama : padDragon(state.dragon);
         }
 
-        function switchTab(tab) {
-            if (isSpinning) return;
-            currentTab = tab;
-            document.getElementById('tab-garama').classList.toggle('active', tab === 'garama');
-            document.getElementById('tab-dragon').classList.toggle('active', tab === 'dragon');
+        function amIn(list) {
+            return list.includes(myIdentifier);
+        }
 
-            const centerImg = document.getElementById('centerImg');
-            const infoText = document.getElementById('infoText');
-            const exceptionText = document.getElementById('exceptionText');
-            const participants = getParticipants(tab);
+        function fallbackAvatar(identifier) {
+            return `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(identifier)}`;
+        }
 
-            if (tab === 'garama') {
-                centerImg.src = 'Garama.png';
-                infoText.innerHTML = "Бесплатный розыгрыш каждые 3 дня. <br>Победитель заберет Гараму!";
-                exceptionText.style.display = 'none';
-                updateGaramaButton();
+        function getAvatarSrc(identifier) {
+            if (identifier.startsWith('@')) {
+                return `https://t.me/i/userpic/320/${identifier.slice(1)}.jpg`;
+            }
+            return fallbackAvatar(identifier);
+        }
+
+        function renderWheel() {
+            if (state.spinning) return;
+            const participants = currentParticipants();
+            const wheel = document.getElementById('wheel');
+            wheel.innerHTML = '';
+            wheel.style.transition = 'none';
+            wheel.style.transform = '';
+            wheel.className = 'wheel idle';
+
+            const total = Math.max(participants.length, 1);
+            const center = WHEEL_SIZE / 2;
+
+            participants.forEach((identifier, index) => {
+                const angle = (index / total) * (2 * Math.PI);
+                const x = WHEEL_RADIUS * Math.cos(angle) + center;
+                const y = WHEEL_RADIUS * Math.sin(angle) + center;
+
+                if (identifier !== "") {
+                    const img = document.createElement('img');
+                    img.className = 'avatar';
+                    img.style.left = `${x}px`;
+                    img.style.top = `${y}px`;
+                    img.src = (identifier === myIdentifier && myPhotoUrl) ? myPhotoUrl : getAvatarSrc(identifier);
+                    img.onerror = () => {
+                        img.onerror = null;
+                        img.src = fallbackAvatar(identifier);
+                    };
+                    wheel.appendChild(img);
+                } else {
+                    const emptySlot = document.createElement('div');
+                    emptySlot.className = 'avatar empty';
+                    emptySlot.style.left = `${x}px`;
+                    emptySlot.style.top = `${y}px`;
+                    wheel.appendChild(emptySlot);
+                }
+            });
+        }
+
+        function updateMainButton() {
+            if (!tg?.MainButton) return;
+            const shareBtn = document.getElementById('shareBtn');
+
+            if (state.tab === 'garama') {
+                if (amIn(state.garama)) {
+                    tg.MainButton.setText("ВЫ В ИГРЕ");
+                    tg.MainButton.color = tg.themeParams?.hint_color || "#999999";
+                    tg.MainButton.disable();
+                    shareBtn.style.display = 'flex';
+                } else {
+                    tg.MainButton.setText("ВОЙТИ В РОЗЫГРЫШ");
+                    tg.MainButton.color = tg.themeParams?.button_color || "#3390ec";
+                    tg.MainButton.enable();
+                    shareBtn.style.display = 'none';
+                }
             } else {
-                centerImg.src = 'Dragon.png';
-                infoText.innerHTML = "<b>Цена: 1 Гарама.</b><br>Розыгрыш по субботам в 20:00 МСК.";
-                exceptionText.style.display = 'block';
-                document.getElementById('shareBtn').style.display = 'none';
-
-                if (tg?.MainButton) {
+                if (amIn(state.dragon)) {
+                    tg.MainButton.setText("ВЫ В ИГРЕ");
+                    tg.MainButton.color = tg.themeParams?.hint_color || "#999999";
+                    tg.MainButton.disable();
+                } else {
                     tg.MainButton.setText("ВОЙТИ ЗА ГАРАМУ");
                     tg.MainButton.color = tg.themeParams?.button_color || "#3390ec";
                     tg.MainButton.enable();
                 }
-            }
-
-            renderWheel(participants);
-            updateTimer();
-
-            const winner = tab === 'garama' ? garamaWinner : dragonWinner;
-            if (winner) {
-                setTimeout(() => spinToWinner(winner, participants), 600);
-            }
-        }
-
-        function updateGaramaButton() {
-            if (!tg?.MainButton) return;
-            const shareBtn = document.getElementById('shareBtn');
-            if (hasJoinedGarama) {
-                tg.MainButton.setText("ВЫ В ИГРЕ");
-                tg.MainButton.color = tg.themeParams?.hint_color || "#999999";
-                tg.MainButton.disable();
-                shareBtn.style.display = 'flex';
-            } else {
-                tg.MainButton.setText("ВОЙТИ В РОЗЫГРЫШ");
-                tg.MainButton.color = tg.themeParams?.button_color || "#3390ec";
-                tg.MainButton.enable();
                 shareBtn.style.display = 'none';
             }
+            tg.MainButton.show();
         }
 
         function handleMainButtonClick() {
-            if (currentTab === 'garama') {
-                if (!hasJoinedGarama) {
-                    hasJoinedGarama = true;
-                    localStorage.setItem('has_joined_garama', 'true');
-                    if (tg?.CloudStorage) {
-                        try { tg.CloudStorage.setItem('has_joined_garama', 'true'); } catch (e) {}
-                    }
-                    if (tg) {
-                        try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {}
-                        tg.showAlert("Вы успешно вошли в розыгрыш Гарамы!");
-                    }
-                    updateGaramaButton();
-                }
+            if (!tg) return;
+            try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {}
+            if (state.tab === 'garama') {
+                tg.openTelegramLink(`https://t.me/${BOT_USERNAME}?start=join`);
+                setTimeout(() => tg.close(), 300);
             } else {
-                if (tg) {
-                    try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {}
-                    tg.openTelegramLink('https://t.me/' + ADMIN_USERNAME);
-                }
+                tg.openTelegramLink('https://t.me/' + ADMIN_USERNAME);
             }
         }
 
@@ -532,7 +554,7 @@
             if (!tg) return;
             try { tg.HapticFeedback.impactOccurred('medium'); } catch (e) {}
             const shareText = "Я участвую в бесплатном розыгрыше на гараму тут👇👇👇\n\n— @RODOMITSGift_bot —";
-            const shareUrl = "https://t.me/share/url?url=" + encodeURIComponent("https://t.me/RODOMITSGift_bot") + "&text=" + encodeURIComponent(shareText);
+            const shareUrl = "https://t.me/share/url?url=" + encodeURIComponent(`https://t.me/${BOT_USERNAME}`) + "&text=" + encodeURIComponent(shareText);
             tg.openTelegramLink(shareUrl);
         }
 
@@ -569,7 +591,6 @@
                 try { document.execCommand('copy'); showCopied(); } catch (e) {}
                 document.body.removeChild(area);
             };
-
             if (navigator.clipboard?.writeText) {
                 navigator.clipboard.writeText(BIO_TEXT).then(showCopied).catch(fallbackCopy);
             } else {
@@ -577,80 +598,50 @@
             }
         }
 
-        function fallbackAvatar(identifier) {
-            return `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(identifier)}`;
-        }
+        function switchTab(tab) {
+            if (state.spinning) return;
+            state.tab = tab;
+            document.getElementById('tab-garama').classList.toggle('active', tab === 'garama');
+            document.getElementById('tab-dragon').classList.toggle('active', tab === 'dragon');
 
-        function getAvatarSrc(identifier) {
-            if (identifier.startsWith('@')) {
-                return `https://t.me/i/userpic/320/${identifier.slice(1)}.jpg`;
+            const centerImg = document.getElementById('centerImg');
+            const infoText = document.getElementById('infoText');
+            const exceptionText = document.getElementById('exceptionText');
+
+            if (tab === 'garama') {
+                centerImg.src = 'Garama.png';
+                infoText.innerHTML = "Бесплатный розыгрыш каждые 3 дня. <br>Победитель заберет Гараму!";
+                exceptionText.style.display = 'none';
+            } else {
+                centerImg.src = 'Dragon.png';
+                infoText.innerHTML = "<b>Цена: 1 Гарама.</b><br>Розыгрыш по субботам в 20:00 МСК.";
+                exceptionText.style.display = 'block';
             }
-            return fallbackAvatar(identifier);
+
+            renderWheel();
+            updateMainButton();
+            updateTimer();
         }
 
-        function renderWheel(participants) {
-            const wheel = document.getElementById('wheel');
-            wheel.innerHTML = '';
-            wheel.style.transition = 'none';
-            wheel.style.transform = '';
-            wheel.className = 'wheel idle';
-
-            const total = Math.max(participants.length, 1);
-            const center = WHEEL_SIZE / 2;
-
-            participants.forEach((identifier, index) => {
-                const angle = (index / total) * (2 * Math.PI);
-                const x = WHEEL_RADIUS * Math.cos(angle) + center;
-                const y = WHEEL_RADIUS * Math.sin(angle) + center;
-
-                if (identifier !== "") {
-                    const img = document.createElement('img');
-                    img.className = 'avatar';
-                    img.style.left = `${x}px`;
-                    img.style.top = `${y}px`;
-                    img.dataset.identifier = identifier;
-
-                    img.src = (identifier === myIdentifier && myPhotoUrl) ? myPhotoUrl : getAvatarSrc(identifier);
-
-                    img.onerror = () => {
-                        img.onerror = null;
-                        img.src = fallbackAvatar(identifier);
-                    };
-
-                    wheel.appendChild(img);
-                } else {
-                    const emptySlot = document.createElement('div');
-                    emptySlot.className = 'avatar empty';
-                    emptySlot.style.left = `${x}px`;
-                    emptySlot.style.top = `${y}px`;
-                    wheel.appendChild(emptySlot);
-                }
-            });
-        }
-
-        function finishSpin(winnerIdentifier) {
-            if (!tg) {
-                isSpinning = false;
-                return;
-            }
+        function finishSpin(winnerName) {
+            state.spinning = false;
+            if (!tg) return;
             try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) {}
-            tg.showAlert("Победитель: " + winnerIdentifier + "\nРезультаты отправлены в бота.", () => {
-                localStorage.removeItem('has_joined_garama');
-                if (tg.CloudStorage) {
-                    try { tg.CloudStorage.removeItem('has_joined_garama'); } catch (e) {}
-                }
-                tg.close();
+            tg.showAlert("Победитель: " + winnerName, () => {
+                renderWheel();
+                updateMainButton();
+                updateTimer();
             });
         }
 
-        function spinToWinner(winnerIdentifier, participants) {
+        function spinToWinner(winnerIdentifier, winnerName, participants) {
             const index = participants.indexOf(winnerIdentifier);
             if (index === -1) {
-                if (tg) tg.showAlert("Победитель: " + winnerIdentifier);
+                if (tg) tg.showAlert("Победитель: " + winnerName);
                 return;
             }
 
-            isSpinning = true;
+            state.spinning = true;
             document.getElementById('timerDisplay').innerText = "ВЫБОР ПОБЕДИТЕЛЯ...";
             if (tg) try { tg.HapticFeedback.notificationOccurred('warning'); } catch (e) {}
 
@@ -665,7 +656,58 @@
             wheel.style.transition = `transform ${SPIN_DURATION_MS}ms cubic-bezier(0.1, 0.7, 0.1, 1)`;
             wheel.style.transform = `rotate(${finalAngle}deg)`;
 
-            setTimeout(() => finishSpin(winnerIdentifier), SPIN_DURATION_MS + 600);
+            setTimeout(() => finishSpin(winnerName), SPIN_DURATION_MS + 600);
+        }
+
+        function tryPlayResult(key) {
+            const result = pendingResults[key];
+            if (!result || state.spinning) return;
+            if (state.seenDraws[key] === result.draw_id) return;
+
+            const createdAt = result.created_at?.seconds || 0;
+            if (Date.now() / 1000 - createdAt > RESULT_MAX_AGE_SECONDS) {
+                markDrawSeen(key, result.draw_id);
+                return;
+            }
+
+            if (state.tab !== key) switchTab(key);
+
+            const base = key === 'garama' ? state.garama : padDragon(state.dragon);
+            const pool = base.includes(result.winner_identifier)
+                ? base
+                : [...base.filter(Boolean), result.winner_identifier];
+
+            markDrawSeen(key, result.draw_id);
+
+            const wheel = document.getElementById('wheel');
+            const total = Math.max(pool.length, 1);
+            const center = WHEEL_SIZE / 2;
+            wheel.innerHTML = '';
+            pool.forEach((identifier, index) => {
+                const angle = (index / total) * (2 * Math.PI);
+                const x = WHEEL_RADIUS * Math.cos(angle) + center;
+                const y = WHEEL_RADIUS * Math.sin(angle) + center;
+                if (identifier !== "") {
+                    const img = document.createElement('img');
+                    img.className = 'avatar';
+                    img.style.left = `${x}px`;
+                    img.style.top = `${y}px`;
+                    img.src = (identifier === myIdentifier && myPhotoUrl) ? myPhotoUrl : getAvatarSrc(identifier);
+                    img.onerror = () => {
+                        img.onerror = null;
+                        img.src = fallbackAvatar(identifier);
+                    };
+                    wheel.appendChild(img);
+                } else {
+                    const emptySlot = document.createElement('div');
+                    emptySlot.className = 'avatar empty';
+                    emptySlot.style.left = `${x}px`;
+                    emptySlot.style.top = `${y}px`;
+                    wheel.appendChild(emptySlot);
+                }
+            });
+
+            spinToWinner(result.winner_identifier, result.winner_name, pool);
         }
 
         function getMskNow() {
@@ -678,7 +720,7 @@
             const target = new Date(mskNow);
             target.setHours(20, 0, 0, 0);
 
-            if (currentTab === 'dragon') {
+            if (state.tab === 'dragon') {
                 let daysToSaturday = (6 - target.getDay() + 7) % 7;
                 if (daysToSaturday === 0 && mskNow >= target) daysToSaturday = 7;
                 target.setDate(target.getDate() + daysToSaturday);
@@ -693,24 +735,60 @@
         }
 
         function updateTimer() {
-            if (isSpinning) return;
+            if (state.spinning) return;
             const diff = getNextDrawDate() - getMskNow();
+            const display = document.getElementById('timerDisplay');
             if (diff <= 0) {
-                document.getElementById('timerDisplay').innerText = "РОЗЫГРЫШ ЗАВЕРШЕН";
+                display.innerText = "РОЗЫГРЫШ ЗАВЕРШЕН";
                 return;
             }
-
             const d = Math.floor(diff / 86400000);
             const h = Math.floor((diff % 86400000) / 3600000);
             const m = Math.floor((diff % 3600000) / 60000);
             const s = Math.floor((diff % 60000) / 1000);
             let timeString = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
             if (d > 0) timeString = `${d} дн. ` + timeString;
-            document.getElementById('timerDisplay').innerText = timeString;
+            display.innerText = timeString;
         }
 
+        function subscribeParticipants(field, stateKey) {
+            const participantsQuery = query(collection(firestore, "users"), where(field, "==", true));
+            onSnapshot(participantsQuery, (snapshot) => {
+                state[stateKey] = snapshot.docs
+                    .map(item => item.data().identifier)
+                    .filter(Boolean);
+                if (!state.spinning) {
+                    if (state.tab === stateKey) renderWheel();
+                    updateMainButton();
+                }
+            }, (error) => console.error("Firestore participants error:", error));
+        }
+
+        function subscribeResult(key) {
+            onSnapshot(doc(firestore, "results", key), (snapshot) => {
+                if (!snapshot.exists()) return;
+                pendingResults[key] = snapshot.data();
+                tryPlayResult(key);
+            }, (error) => console.error("Firestore result error:", error));
+        }
+
+        if (tg?.MainButton) {
+            try { tg.MainButton.onClick(handleMainButtonClick); } catch (e) {}
+        }
+
+        window.switchTab = switchTab;
+        window.handleShare = handleShare;
+        window.openBioModal = openBioModal;
+        window.closeBioModal = closeBioModal;
+        window.copyBioText = copyBioText;
+
+        subscribeParticipants("joined", "garama");
+        subscribeParticipants("has_ticket", "dragon");
+        subscribeResult("garama");
+        subscribeResult("dragon");
+
         setInterval(updateTimer, 1000);
-        switchTab(currentTab);
+        switchTab('garama');
     </script>
 </body>
 </html>
